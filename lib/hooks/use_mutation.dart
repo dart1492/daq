@@ -1,4 +1,4 @@
-import 'package:daq/darts_async_query.dart';
+import 'package:daq/daq.dart';
 import 'package:flutter/widgets.dart';
 import 'package:flutter_hooks/flutter_hooks.dart';
 

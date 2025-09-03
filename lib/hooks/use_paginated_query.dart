@@ -1,4 +1,4 @@
-import 'package:daq/darts_async_query.dart';
+import 'package:daq/daq.dart';
 import 'dart:async';
 import 'package:flutter_hooks/flutter_hooks.dart';
 
@@ -285,7 +285,7 @@ usePaginatedQuery<TData, TParams, TError>({
   // Auto-fetch on mount
   useEffect(() {
     if (autoFetch && state.value.data.isEmpty && !state.value.isLoading) {
-      final dasd = fetch();
+      fetch();
     }
     return null;
   }, [autoFetch]);

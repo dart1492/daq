@@ -1,5 +1,5 @@
 import 'dart:async';
-import 'package:daq/darts_async_query.dart';
+import 'package:daq/daq.dart';
 import 'package:flutter_hooks/flutter_hooks.dart';
 
 /// Hook for simple single object queries with caching
