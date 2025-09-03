@@ -1,8 +1,4 @@
-import 'dart:math';
-
 import 'package:daq/darts_async_query.dart';
-import 'package:daq/utils/async_cache/index.dart';
-import 'package:daq/hooks/use_daq_debug.dart';
 import 'package:flutter/widgets.dart';
 import 'package:flutter_hooks/flutter_hooks.dart';
 
@@ -119,10 +115,6 @@ useMutation<TData, TVariables, TError>({
       final errorTransformed = errorTransformer(error, stackTrace);
 
       daqDebugPrint('[DAQ Mutation] Error occurred: $error');
-
-      daqDebugPrint(
-        '[DAQ Mutation] Error Stack trace: $stackTrace',
-      ); //TODO: STACK TRACE - should I display it fully?
 
       state.value = MutationState.error(errorTransformed);
 

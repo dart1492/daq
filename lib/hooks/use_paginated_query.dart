@@ -118,8 +118,6 @@ usePaginatedQuery<TData, TParams, TError>({
     } on Object catch (error, stackTrace) {
       daqDebugPrint('[DAQ Paginated Query] Error occurred: $error');
 
-      daqDebugPrint('[DAQ Paginated Query] Error Stack trace: $stackTrace');
-
       final transformedError = errorTransformer(error, stackTrace);
 
       state.value = state.value.copyWith(
@@ -185,8 +183,6 @@ usePaginatedQuery<TData, TParams, TError>({
     } on Object catch (error, stackTrace) {
       daqDebugPrint('[DAQ Paginated Query] Error occurred: $error');
 
-      daqDebugPrint('[DAQ Paginated Query] Error Stack trace: $stackTrace');
-
       final transformedError = errorTransformer(error, stackTrace);
 
       state.value = state.value.copyWith(
@@ -248,8 +244,6 @@ usePaginatedQuery<TData, TParams, TError>({
     } on Object catch (error, stackTrace) {
       daqDebugPrint('[DAQ Paginated Query] Error occurred: $error');
 
-      daqDebugPrint('[DAQ Paginated Query] Error Stack trace: $stackTrace');
-
       final transformedError = errorTransformer(error, stackTrace);
 
       state.value = state.value.copyWith(
@@ -291,7 +285,7 @@ usePaginatedQuery<TData, TParams, TError>({
   // Auto-fetch on mount
   useEffect(() {
     if (autoFetch && state.value.data.isEmpty && !state.value.isLoading) {
-      fetch();
+      final dasd = fetch();
     }
     return null;
   }, [autoFetch]);

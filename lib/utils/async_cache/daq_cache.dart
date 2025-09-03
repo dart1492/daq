@@ -13,6 +13,9 @@ class DAQCache {
   final Map<String, dynamic> _cacheInstance = {};
   final Map<String, Set<String>> _keyTags = {}; // key -> tags
 
+  // Add this new field for tracking inflight requests. Maps key -> running request (fetcher)
+  final Map<String, Future<dynamic>> _inflightRequests = {};
+
   final StreamController<CacheInvalidationEvent> _invalidationController =
       StreamController<CacheInvalidationEvent>.broadcast();
   final StreamController<CacheMutationEvent> _mutationController =
@@ -46,14 +49,61 @@ class DAQCache {
     return _cacheInstance.containsKey(key);
   }
 
+  bool hasInflightRequest(String key) {
+    return _inflightRequests.containsKey(key);
+  }
+
+  /// Get the inflight request for this key if it exists
+  Future<T>? getInflightRequest<T>(String key) {
+    final future = _inflightRequests[key];
+    if (future is Future<T>) {
+      return future;
+    }
+    return null;
+  }
+
+  /// Register a request by it's key. If it is already running - return the existing instance
+  Future<T> executeWithDeduplication<T>(
+    String key,
+    Future<T> Function() requestFn, {
+    List<String>? tags,
+    bool? enableCaching,
+  }) async {
+    // Check if request is already inflight
+    if (_inflightRequests.containsKey(key)) {
+      final existingRequest = _inflightRequests[key];
+      if (existingRequest is Future<T>) {
+        return existingRequest;
+      }
+    }
+
+    // Start new request and track it
+    final requestFuture = requestFn();
+    _inflightRequests[key] = requestFuture;
+
+    try {
+      final result = await requestFuture;
+
+      // Cache the result
+      addToCache(key, result, tags: tags);
+
+      return result;
+    } finally {
+      // Remove from inflight requests when done (success or failure)
+      _inflightRequests.remove(key);
+    }
+  }
+
   void removeKey(String key) {
     _cacheInstance.remove(key);
     _keyTags.remove(key);
+    _inflightRequests.remove(key);
   }
 
   void clearAll() {
     _cacheInstance.clear();
     _keyTags.clear();
+    _inflightRequests.clear();
   }
 
   List<String> get keys => _cacheInstance.keys.toList();

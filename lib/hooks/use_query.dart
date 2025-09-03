@@ -90,18 +90,41 @@ QueryController<TData, TParams, TError> useQuery<TData, TParams, TError>({
         }
       }
 
-      daqDebugPrint('[DAQ Query]  Executing the query function for: $cacheKey');
-
       late TData result;
-      if (timeout != null) {
-        result = await queryFn(currentParameters).timeout(timeout);
-      } else {
-        result = await queryFn(currentParameters);
-      }
 
-      // Cache the result
-      if (enableCache) {
-        cache.addToCache(cacheKey, result, tags: cacheTags);
+      if (!enableCache) {
+        daqDebugPrint(
+          '[DAQ Query]  Executing the query function for: $cacheKey (NO CACHING)',
+        );
+        // if the caching is disabled for this query - just execute it, without adding the request to the duplication map.
+        if (timeout != null) {
+          result = await queryFn(currentParameters).timeout(timeout);
+        } else {
+          result = await queryFn(currentParameters);
+        }
+      } else {
+        if (!cache.hasInflightRequest(cacheKey)) {
+          daqDebugPrint(
+            '[DAQ Query]  Executing the query function for: $cacheKey ()',
+          );
+        } else {
+          daqDebugPrint(
+            '[DAQ Query]  Request for: $cacheKey is already running - waiting to be completed',
+          );
+        }
+
+        // perform the request by first checking if it's running already
+        result = await cache.executeWithDeduplication<TData>(
+          cacheKey,
+          () async {
+            if (timeout != null) {
+              return await queryFn(currentParameters).timeout(timeout);
+            } else {
+              return await queryFn(currentParameters);
+            }
+          },
+          tags: cacheTags,
+        );
       }
 
       state.value = QueryState(data: result, status: QueryStatus.success);
@@ -113,8 +136,6 @@ QueryController<TData, TParams, TError> useQuery<TData, TParams, TError>({
       state.value = QueryState.error(transformedError);
 
       daqDebugPrint('[DAQ Query] Error occurred: $error');
-
-      daqDebugPrint('[DAQ Query] Error Stack trace: $stackTrace');
 
       onError?.call(transformedError);
     } finally {

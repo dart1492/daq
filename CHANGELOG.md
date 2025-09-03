@@ -1,3 +1,3 @@
-## 0.0.1
+## 0.0.2
 
-* TODO: Describe initial release.
+Includes useMutation, useQuery and usePaginatedQuery that are somewhat useable - not fully tested and probably contain bugs.
