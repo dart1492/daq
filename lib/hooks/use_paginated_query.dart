@@ -1,4 +1,7 @@
 import 'package:daq/daq.dart';
+import 'package:daq/models/controllers/paginated_query_controller.dart';
+import 'package:daq/models/states/paginated_query_state.dart';
+import 'package:daq/hooks/helpers/use_invalidation_sub.dart';
 import 'dart:async';
 import 'package:flutter_hooks/flutter_hooks.dart';
 
@@ -37,7 +40,7 @@ import 'package:flutter_hooks/flutter_hooks.dart';
 /// ```
 PaginatedQueryController<TData, TParams, TError>
 usePaginatedQuery<TData, TParams, TError>({
-  required Future<DAQPaginatedResponse<TData>> Function(
+  required Future<DAQPaginatedQueryResponse<TData>> Function(
     TParams params,
     int page,
     int pageSize,
@@ -58,13 +61,13 @@ usePaginatedQuery<TData, TParams, TError>({
 
   List<String>? cacheTags,
 }) {
-  final state = useState<PaginatedState<TData, TParams, TError>>(
-    PaginatedState(data: [], parameters: initialParameters),
+  final context = useContext();
+
+  final state = useState<PaginatedQueryState<TData, TParams, TError>>(
+    PaginatedQueryState(data: [], parameters: initialParameters),
   );
 
   final cache = useDAQCache();
-
-  final daqDebugPrint = useDAQDebug();
 
   // Generate cache key based on cache prefix, filters and page
   String generateCacheKey(TParams? filters, int page) {
@@ -73,25 +76,28 @@ usePaginatedQuery<TData, TParams, TError>({
 
   // Fetch first page (reset pagination)
   Future<void> fetch({TParams? newParameters}) async {
-    state.value = state.value.copyWith(
-      loadingState: LoadingState.loading,
-      parameters: newParameters ?? state.value.parameters,
-      currentPage: 1,
-    );
+    if (context.mounted) {
+      state.value = state.value.copyWith(
+        loadingState: PaginatedQueryLoadingState.loading,
+        parameters: newParameters ?? state.value.parameters,
+        currentPage: 1,
+      );
+    }
 
     try {
       final cacheKey = generateCacheKey(state.value.parameters, 1);
 
       // Check cache first
       if (enableCache && cache.hasKey(cacheKey)) {
-        final cachedResponse = cache.getValue<DAQPaginatedResponse<TData>>(
+        final cachedResponse = cache.getValue<DAQPaginatedQueryResponse<TData>>(
           cacheKey,
         );
+
         if (cachedResponse != null) {
-          daqDebugPrint('[DAQ Paginated Query] Loading from cache: $cacheKey');
+          DAQLogger.instance.paginatedQuery('Loading from cache: $cacheKey');
           state.value = state.value.copyWith(
             data: cachedResponse.items,
-            loadingState: LoadingState.success,
+            loadingState: PaginatedQueryLoadingState.success,
             totalPages: cachedResponse.totalPages,
             totalItems: cachedResponse.totalItems,
             hasNextPage: cachedResponse.hasNextPage,
@@ -100,7 +106,7 @@ usePaginatedQuery<TData, TParams, TError>({
         }
       }
 
-      daqDebugPrint('[DAQ Paginated Query] Fetching from API: $cacheKey');
+      DAQLogger.instance.paginatedQuery('Fetching from API: $cacheKey');
       final result = await fetcher(state.value.parameters, 1, pageSize);
 
       // Cache the result
@@ -108,52 +114,65 @@ usePaginatedQuery<TData, TParams, TError>({
         cache.addToCache(cacheKey, result, tags: cacheTags);
       }
 
-      state.value = state.value.copyWith(
-        data: result.items,
-        loadingState: LoadingState.success,
-        totalPages: result.totalPages,
-        totalItems: result.totalItems,
-        hasNextPage: result.hasNextPage,
-      );
+      if (context.mounted) {
+        state.value = state.value.copyWith(
+          data: result.items,
+          loadingState: PaginatedQueryLoadingState.success,
+          totalPages: result.totalPages,
+          totalItems: result.totalItems,
+          hasNextPage: result.hasNextPage,
+        );
+      }
     } on Object catch (error, stackTrace) {
-      daqDebugPrint('[DAQ Paginated Query] Error occurred: $error');
+      DAQLogger.instance.error(
+        'Error occurred: $error',
+        'DAQ Paginated Query',
+        error,
+      );
 
       final transformedError = errorTransformer(error, stackTrace);
 
-      state.value = state.value.copyWith(
-        loadingState: LoadingState.error,
-        error: transformedError,
-      );
+      if (context.mounted) {
+        state.value = state.value.copyWith(
+          loadingState: PaginatedQueryLoadingState.error,
+          error: transformedError,
+        );
+      }
     }
   }
 
   // Fetch next page (append to existing data)
   Future<void> fetchNextPage() async {
     if (!state.value.hasNextPage ||
-        state.value.loadingState == LoadingState.loadingMore) {
+        state.value.loadingState == PaginatedQueryLoadingState.loadingMore) {
       return;
     }
 
     final nextPage = state.value.currentPage + 1;
-    state.value = state.value.copyWith(loadingState: LoadingState.loadingMore);
+
+    if (context.mounted) {
+      state.value = state.value.copyWith(
+        loadingState: PaginatedQueryLoadingState.loadingMore,
+      );
+    }
 
     try {
       final cacheKey = generateCacheKey(state.value.parameters, nextPage);
 
       // Check cache first
       if (enableCache && cache.hasKey(cacheKey)) {
-        final cachedResponse = cache.getValue<DAQPaginatedResponse<TData>>(
+        final cachedResponse = cache.getValue<DAQPaginatedQueryResponse<TData>>(
           cacheKey,
         );
         if (cachedResponse != null) {
-          daqDebugPrint(
-            '[DAQ Paginated Query] Loading next page from cache: $cacheKey',
+          DAQLogger.instance.paginatedQuery(
+            'Loading next page from cache: $cacheKey',
           );
           final combinedData = List<TData>.from(state.value.data)
             ..addAll(cachedResponse.items);
           state.value = state.value.copyWith(
             data: combinedData,
-            loadingState: LoadingState.success,
+            loadingState: PaginatedQueryLoadingState.success,
             currentPage: nextPage,
             hasNextPage: cachedResponse.hasNextPage,
           );
@@ -161,8 +180,8 @@ usePaginatedQuery<TData, TParams, TError>({
         }
       }
 
-      daqDebugPrint(
-        '[DAQ Paginated Query] Loading next page by using the fetcher',
+      DAQLogger.instance.paginatedQuery(
+        'Loading next page by using the fetcher',
       );
       final result = await fetcher(state.value.parameters, nextPage, pageSize);
 
@@ -173,60 +192,74 @@ usePaginatedQuery<TData, TParams, TError>({
 
       final combinedData = List<TData>.from(state.value.data)
         ..addAll(result.items);
-
-      state.value = state.value.copyWith(
-        data: combinedData,
-        loadingState: LoadingState.success,
-        currentPage: nextPage,
-        hasNextPage: result.hasNextPage,
-      );
+      if (context.mounted) {
+        state.value = state.value.copyWith(
+          data: combinedData,
+          loadingState: PaginatedQueryLoadingState.success,
+          currentPage: nextPage,
+          hasNextPage: result.hasNextPage,
+        );
+      }
     } on Object catch (error, stackTrace) {
-      daqDebugPrint('[DAQ Paginated Query] Error occurred: $error');
+      DAQLogger.instance.error(
+        'Error occurred: $error',
+        'DAQ Paginated Query',
+        error,
+      );
 
       final transformedError = errorTransformer(error, stackTrace);
 
-      state.value = state.value.copyWith(
-        loadingState: LoadingState.error,
-        error: transformedError,
-      );
+      if (context.mounted) {
+        state.value = state.value.copyWith(
+          loadingState: PaginatedQueryLoadingState.error,
+          error: transformedError,
+        );
+      }
     }
   }
 
   // Fetch previous page (for bidirectional pagination)
   Future<void> fetchPreviousPage() async {
     if (state.value.currentPage <= 1 ||
-        state.value.loadingState == LoadingState.loadingMore) {
+        state.value.loadingState == PaginatedQueryLoadingState.loadingMore) {
       return;
     }
 
     final prevPage = state.value.currentPage - 1;
-    state.value = state.value.copyWith(loadingState: LoadingState.loadingMore);
+
+    if (context.mounted) {
+      state.value = state.value.copyWith(
+        loadingState: PaginatedQueryLoadingState.loadingMore,
+      );
+    }
 
     try {
       final cacheKey = generateCacheKey(state.value.parameters, prevPage);
 
       // Check cache first
       if (enableCache && cache.hasKey(cacheKey)) {
-        final cachedResponse = cache.getValue<DAQPaginatedResponse<TData>>(
+        final cachedResponse = cache.getValue<DAQPaginatedQueryResponse<TData>>(
           cacheKey,
         );
         if (cachedResponse != null) {
-          daqDebugPrint(
-            '[DAQ Paginated Query] Loading prev page from cache: $cacheKey',
+          DAQLogger.instance.paginatedQuery(
+            'Loading prev page from cache: $cacheKey',
           );
-          state.value = state.value.copyWith(
-            data: cachedResponse.items,
-            loadingState: LoadingState.success,
-            currentPage: prevPage,
-            hasNextPage:
-                true, // Since we went back, there's definitely a next page
-          );
+          if (context.mounted) {
+            state.value = state.value.copyWith(
+              data: cachedResponse.items,
+              loadingState: PaginatedQueryLoadingState.success,
+              currentPage: prevPage,
+              hasNextPage:
+                  true, // Since we went back, there's definitely a next page
+            );
+          }
           return;
         }
       }
 
-      daqDebugPrint(
-        '[DAQ Paginated Query] Loading prev page by using the fetcher',
+      DAQLogger.instance.paginatedQuery(
+        'Loading prev page by using the fetcher',
       );
       final result = await fetcher(state.value.parameters, prevPage, pageSize);
 
@@ -235,28 +268,37 @@ usePaginatedQuery<TData, TParams, TError>({
         cache.addToCache(cacheKey, result, tags: cacheTags);
       }
 
-      state.value = state.value.copyWith(
-        data: result.items,
-        loadingState: LoadingState.success,
-        currentPage: prevPage,
-        hasNextPage: true, // Since we went back, there's definitely a next page
-      );
+      if (context.mounted) {
+        state.value = state.value.copyWith(
+          data: result.items,
+          loadingState: PaginatedQueryLoadingState.success,
+          currentPage: prevPage,
+          hasNextPage:
+              true, // Since we went back, there's definitely a next page
+        );
+      }
     } on Object catch (error, stackTrace) {
-      daqDebugPrint('[DAQ Paginated Query] Error occurred: $error');
+      DAQLogger.instance.error(
+        'Error occurred: $error',
+        'DAQ Paginated Query',
+        error,
+      );
 
       final transformedError = errorTransformer(error, stackTrace);
 
-      state.value = state.value.copyWith(
-        loadingState: LoadingState.error,
-        error: transformedError,
-      );
+      if (context.mounted) {
+        state.value = state.value.copyWith(
+          loadingState: PaginatedQueryLoadingState.error,
+          error: transformedError,
+        );
+      }
     }
   }
 
   // Refetch from ground up (clear cache and start fresh)
   Future<void> refetchFromStart({TParams? newParameters}) async {
-    daqDebugPrint(
-      '[DAQ Paginated Query] Refetching the whole list form the start',
+    DAQLogger.instance.paginatedQuery(
+      'Refetching the whole list from the start',
     );
 
     // Clear cache for this filter set
@@ -291,54 +333,17 @@ usePaginatedQuery<TData, TParams, TError>({
   }, [autoFetch]);
 
   // Subscribe to cache invalidation events
-  useEffect(() {
-    late StreamSubscription invalidationSubscription;
-
-    invalidationSubscription = cache.invalidationStream.listen((event) {
-      // Check if any of our cache keys were invalidated
-      bool shouldRefetch = false;
-
-      // Check all pages for this filter set
-      final filterHash = state.value.parameters.hashCode;
-      final keyPattern = '${cachePrefix}_${filterHash}_page_';
-
-      // Direct key match
-      for (final invalidatedKey in event.invalidatedKeys) {
-        if (invalidatedKey.startsWith(keyPattern)) {
-          shouldRefetch = true;
-          break;
-        }
-      }
-
-      // Pattern match
-      if (!shouldRefetch && event.pattern != null) {
-        final regex = RegExp(event.pattern!.replaceAll('*', '.*'));
-        if (regex.hasMatch('${cachePrefix}_${filterHash}_page_1')) {
-          shouldRefetch = true;
-        }
-      }
-
-      // Tag match
-      if (!shouldRefetch && event.tags != null && cacheTags != null) {
-        final eventTagsSet = event.tags!.toSet();
-        final cacheTagsSet = cacheTags.toSet();
-        if (eventTagsSet.intersection(cacheTagsSet).isNotEmpty) {
-          shouldRefetch = true;
-        }
-      }
-
-      // Refetch if invalidated and we have data
-      if (shouldRefetch && state.value.data.isNotEmpty) {
-        daqDebugPrint(
-          '[DAQ Paginated Query] Auto-refetching paginated query due to cache invalidation: $keyPattern',
-        );
-
+  useInvalidationSub(
+    cache: cache,
+    keyPattern: '${cachePrefix}_${state.value.parameters.hashCode}_page_*',
+    cacheTags: cacheTags,
+    logPrefix: 'paginated query',
+    onInvalidated: () {
+      if (state.value.data.isNotEmpty) {
         refetchFromStart();
       }
-    });
-
-    return invalidationSubscription.cancel;
-  }, [cache, cachePrefix, state.value.parameters, cacheTags]);
+    },
+  );
 
   // Subscribe to cache mutation events
   useEffect(() {
@@ -346,7 +351,7 @@ usePaginatedQuery<TData, TParams, TError>({
 
     mutationSubscription = cache.mutationStream.listen((event) {
       bool shouldUpdate = false;
-      final updatedPages = <int, DAQPaginatedResponse<TData>>{};
+      final updatedPages = <int, DAQPaginatedQueryResponse<TData>>{};
 
       final filterHash = state.value.parameters.hashCode;
       final keyPattern = '${cachePrefix}_${filterHash}_page_';
@@ -361,12 +366,13 @@ usePaginatedQuery<TData, TParams, TError>({
               try {
                 final newPageData =
                     event.mutatedData[mutatedKey]
-                        as DAQPaginatedResponse<TData>;
+                        as DAQPaginatedQueryResponse<TData>;
                 updatedPages[pageNumber] = newPageData;
                 shouldUpdate = true;
               } catch (e) {
-                daqDebugPrint(
-                  '[DAQ Paginated Query] ⚠️ Failed to cast mutated data for key $mutatedKey: $e',
+                DAQLogger.instance.warning(
+                  'Failed to cast mutated data for key $mutatedKey: $e',
+                  'DAQ Paginated Query',
                 );
               }
             }
@@ -375,11 +381,12 @@ usePaginatedQuery<TData, TParams, TError>({
       }
 
       if (shouldUpdate && updatedPages.isNotEmpty) {
-        daqDebugPrint(
-          '[DAQ Paginated Query] Auto-rebuilding paginated query due to cache mutation: $keyPattern',
+        DAQLogger.instance.paginatedQuery(
+          'Auto-rebuilding paginated query due to cache mutation: $keyPattern',
         );
         // For now, if page 1 was updated, rebuild the entire data
-        // More sophisticated merging could be implemented later
+        // TODO: I GUESS HERE WE CAN TAKE ALL OF THE LOADED ITEMS - SPLIT BY PAGE SIZES AND UPDATE ONLY THOSE PAGES THAT WERE
+        // ACTUALLY UPDATED - AND THEN MERGE THEM ALL TOGETHER AGAIN AND UPDATE STATE.
         if (updatedPages.containsKey(1)) {
           final firstPageData = updatedPages[1]!;
 
@@ -407,138 +414,15 @@ usePaginatedQuery<TData, TParams, TError>({
   // Check if can load more
   final canLoadMore =
       state.value.hasNextPage &&
-      state.value.loadingState != LoadingState.loadingMore;
+      state.value.loadingState != PaginatedQueryLoadingState.loadingMore;
 
-  return PaginatedQueryController._(
+  return PaginatedQueryController(
     state.value,
     fetch,
     fetchNextPage,
     fetchPreviousPage,
     refetchFromStart,
     updateParameters,
-
     canLoadMore,
   );
-}
-
-/// Controller wrapper that provides a clean API for list management
-class PaginatedQueryController<TData, TParams, TError> {
-  PaginatedQueryController._(
-    this.state,
-    this._fetch,
-    this._fetchNextPage,
-    this._fetchPreviousPage,
-    this._refetchFromStart,
-    this._updateParameters,
-    this._canLoadMore,
-  );
-
-  final PaginatedState<TData, TParams, TError> state;
-  final Future<void> Function({TParams? newParameters}) _fetch;
-  final Future<void> Function() _fetchNextPage;
-  final Future<void> Function() _fetchPreviousPage;
-  final Future<void> Function({TParams? newParameters}) _refetchFromStart;
-  final void Function(TParams newFilters) _updateParameters;
-  final bool _canLoadMore;
-
-  // Getters for common state checks
-  bool get isLoading => state.isLoading;
-  bool get isLoadingMore => state.isLoadingMore;
-  bool get isSuccess => state.isSuccess;
-  bool get hasError => state.hasError;
-  bool get isEmpty => state.isEmpty;
-  bool get isNotEmpty => state.isNotEmpty;
-  bool get canLoadMore => _canLoadMore;
-
-  List<TData> get data => state.data;
-  TParams? get filters => state.parameters;
-  TError? get error => state.error;
-  int get currentPage => state.currentPage;
-  int get totalPages => state.totalPages;
-  int get totalItems => state.totalItems;
-  bool get hasNextPage => state.hasNextPage;
-
-  // Actions
-  Future<void> fetch({TParams? newParameters}) =>
-      _fetch(newParameters: newParameters);
-
-  Future<void> fetchNextPage() => _fetchNextPage();
-
-  Future<void> fetchPreviousPage() => _fetchPreviousPage();
-
-  Future<void> refetchFromStart({TParams? newFilters}) =>
-      _refetchFromStart(newParameters: newFilters);
-
-  void updateParameters(TParams newParameters) =>
-      _updateParameters(newParameters);
-}
-
-enum LoadingState { initial, loading, loadingMore, success, error }
-
-class PaginatedState<TData, TParams, TError> {
-  final List<TData> data;
-  final TParams parameters;
-  final int currentPage;
-  final int totalPages;
-  final int totalItems;
-  final bool hasNextPage;
-  final LoadingState loadingState;
-  final TError? error;
-
-  const PaginatedState({
-    this.data = const [],
-    required this.parameters,
-    this.currentPage = 1,
-    this.totalPages = 0,
-    this.totalItems = 0,
-    this.hasNextPage = false,
-    this.loadingState = LoadingState.initial,
-    this.error,
-  });
-
-  PaginatedState<TData, TParams, TError> copyWith({
-    List<TData>? data,
-    TParams? parameters,
-    int? currentPage,
-    int? totalPages,
-    int? totalItems,
-    bool? hasNextPage,
-    LoadingState? loadingState,
-    TError? error,
-  }) {
-    return PaginatedState<TData, TParams, TError>(
-      data: data ?? this.data,
-      parameters: parameters ?? this.parameters,
-      currentPage: currentPage ?? this.currentPage,
-      totalPages: totalPages ?? this.totalPages,
-      totalItems: totalItems ?? this.totalItems,
-      hasNextPage: hasNextPage ?? this.hasNextPage,
-      loadingState: loadingState ?? this.loadingState,
-      error: error ?? this.error,
-    );
-  }
-
-  // Convenience getters
-  bool get isLoading => loadingState == LoadingState.loading;
-  bool get isLoadingMore => loadingState == LoadingState.loadingMore;
-  bool get isSuccess => loadingState == LoadingState.success;
-  bool get hasError => loadingState == LoadingState.error;
-  bool get isEmpty => data.isEmpty;
-  bool get isNotEmpty => data.isNotEmpty;
-  int get itemCount => data.length;
-}
-
-class DAQPaginatedResponse<T> {
-  DAQPaginatedResponse({
-    required this.items,
-    required this.currentPage,
-    required this.totalPages,
-    required this.totalItems,
-    required this.hasNextPage,
-  });
-  final List<T> items;
-  final int currentPage;
-  final int totalPages;
-  final int totalItems;
-  final bool hasNextPage;
 }

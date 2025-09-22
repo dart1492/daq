@@ -1,4 +1,6 @@
 import 'package:daq/daq.dart';
+import 'package:daq/models/controllers/mutation_controller.dart';
+import 'package:daq/models/states/mutation_state.dart';
 import 'package:flutter/widgets.dart';
 import 'package:flutter_hooks/flutter_hooks.dart';
 
@@ -53,8 +55,9 @@ useMutation<TData, TVariables, TError>({
   List<String>? invalidateTags,
   List<String>? invalidateKeys,
 }) {
+  final context = useContext();
+
   final daqCache = useDAQCache();
-  final daqDebugPrint = useDAQDebug();
 
   final state = useState(MutationState<TData, TError>.initial());
 
@@ -62,13 +65,15 @@ useMutation<TData, TVariables, TError>({
     try {
       onMutating?.call(variables);
 
-      state.value = state.value.copyWith(
-        status: MutationStatus.loading,
-        error: null,
-      );
+      if (context.mounted) {
+        state.value = state.value.copyWith(
+          status: MutationLoadingState.loading,
+          error: null,
+        );
+      }
 
-      daqDebugPrint(
-        '[DAQ Mutation] Starting mutation with variables: $variables',
+      DAQLogger.instance.mutation(
+        'Starting mutation with variables: $variables',
       );
 
       late TData result;
@@ -79,123 +84,72 @@ useMutation<TData, TVariables, TError>({
         result = await mutationFn(variables);
       }
 
-      state.value = MutationState.success(result);
+      if (context.mounted) {
+        state.value = MutationState.success(result);
+      }
 
-      daqDebugPrint('[DAQ Mutation] Mutation function completed successfully');
-
-      // Handle cache after successful mutation
-      final cache = daqCache;
+      DAQLogger.instance.success(
+        'Mutation function completed successfully vType: ${variables.runtimeType}',
+        'DAQ Mutation',
+      );
 
       // Invalidate cache if needed (alternative to cache updates)
       if (invalidatePatterns != null) {
-        daqDebugPrint(
-          '[DAQ Mutation] Invalidating cache by patterns: $invalidatePatterns',
+        DAQLogger.instance.mutation(
+          'Invalidating cache by patterns: $invalidatePatterns',
         );
         for (final pattern in invalidatePatterns) {
-          cache.invalidateByPattern(pattern);
+          daqCache.invalidateByPattern(pattern);
         }
       }
 
       if (invalidateTags != null) {
-        daqDebugPrint(
-          '[DAQ Mutation] Invalidating cache by tags: $invalidateTags',
+        DAQLogger.instance.mutation(
+          'Invalidating cache by tags: $invalidateTags',
         );
-        cache.invalidateByTags(invalidateTags);
+        daqCache.invalidateByTags(invalidateTags);
       }
 
       if (invalidateKeys != null) {
-        daqDebugPrint(
-          '[DAQ Mutation] Invalidating cache by keys: $invalidateKeys',
+        DAQLogger.instance.mutation(
+          'Invalidating cache by keys: $invalidateKeys',
         );
-        cache.invalidateKeys(invalidateKeys);
+        daqCache.invalidateKeys(invalidateKeys);
       }
 
-      onSuccess?.call(result, variables, daqCache);
+      if (context.mounted) {
+        onSuccess?.call(result, variables, daqCache);
+      }
     } catch (error, stackTrace) {
       final errorTransformed = errorTransformer(error, stackTrace);
 
-      daqDebugPrint('[DAQ Mutation] Error occurred: $error');
+      DAQLogger.instance.error('Error occurred: $error', 'DAQ Mutation', error);
 
-      state.value = MutationState.error(errorTransformed);
+      if (context.mounted) {
+        state.value = MutationState.error(errorTransformed);
 
-      onError?.call(errorTransformed, variables, daqCache);
+        onError?.call(errorTransformed, variables, daqCache);
+      }
     } finally {
-      onSettled?.call();
+      if (context.mounted) {
+        onSettled?.call();
+      }
 
-      daqDebugPrint(
-        '[DAQ Mutation] onSettled callback executed, final status: ${state.value.status}',
+      DAQLogger.instance.info(
+        'onSettled callback executed, final status: ${state.value.status}',
+        'DAQ Mutation',
       );
     }
   }, [mutationFn, onSuccess, onError, onSettled, onMutating, timeout]);
 
   final reset = useCallback(() {
-    daqDebugPrint('[DAQ Mutation] Resetting mutation state to initial');
+    DAQLogger.instance.info(
+      ' Resetting mutation state to initial',
+      'DAQ Mutation',
+    );
 
     state.value = MutationState<TData, TError>.initial();
   }, []);
 
-  return MutationController._(state: state.value, mutate: mutate, reset: reset);
-}
-
-/// Controller that provides access to mutation state and actions
-class MutationController<TData, TVariables, TError> {
-  const MutationController._({
-    required this.state,
-    required this.mutate,
-    required this.reset,
-  });
-
-  final MutationState<TData, TError> state;
-  final Future<void> Function(TVariables variables) mutate;
-  final VoidCallback reset;
-
-  bool get isIdle => state.status == MutationStatus.idle;
-  bool get isLoading => state.status == MutationStatus.loading;
-  bool get isSuccess => state.status == MutationStatus.success;
-  bool get isError => state.status == MutationStatus.error;
-
-  TData? get data => state.data;
-  Object? get error => state.error;
-  MutationStatus get status => state.status;
-}
-
-/// Mutation state class
-class MutationState<TData, TError> {
-  const MutationState._({required this.status, this.data, this.error});
-
-  factory MutationState.initial() =>
-      const MutationState._(status: MutationStatus.idle);
-
-  factory MutationState.success(TData data) =>
-      MutationState._(status: MutationStatus.success, data: data);
-
-  factory MutationState.error(TError error) =>
-      MutationState._(status: MutationStatus.error, error: error);
-
-  final MutationStatus status;
-  final TData? data;
-  final TError? error;
-
-  MutationState<TData, TError> copyWith({
-    MutationStatus? status,
-    TData? data,
-    TError? error,
-  }) {
-    return MutationState._(
-      status: status ?? this.status,
-      data: data ?? this.data,
-      error: error ?? this.error,
-    );
-  }
-}
-
-/// Enum representing the status of a mutation
-enum MutationStatus { idle, loading, success, error }
-
-/// Extension to provide convenient methods for mutation status
-extension MutationStatusX on MutationStatus {
-  bool get isIdle => this == MutationStatus.idle;
-  bool get isLoading => this == MutationStatus.loading;
-  bool get isSuccess => this == MutationStatus.success;
-  bool get isError => this == MutationStatus.error;
+  return MutationController(state: state.value, mutate: mutate, reset: reset);
 }

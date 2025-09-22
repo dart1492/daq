@@ -1,3 +1,9 @@
+import 'dart:async';
+
+typedef InvalidationEventsController = StreamController<CacheInvalidationEvent>;
+
+typedef MutationEventsController = StreamController<CacheMutationEvent>;
+
 /// Cache invalidation event that notifies listeners about invalidated cache keys.
 class CacheInvalidationEvent {
   const CacheInvalidationEvent({
