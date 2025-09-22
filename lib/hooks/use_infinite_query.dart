@@ -5,9 +5,7 @@ import 'package:daq/models/controllers/infinite_query_controller.dart';
 import 'package:daq/models/states/infinite_query_state.dart';
 import 'package:flutter_hooks/flutter_hooks.dart';
 
-/// The main difference between [useInfiniteScrollQuery] and [usePaginatedQuery] is that infinite scroll keeps loading items and adding them to the main list.
-/// So it doesn't really expose the fetchPreviousPage and there is no page_1, page_2 suffix in it's unique cache name.
-/// So the cache key would only be {cacheprefix}_{filtersHash} and thats it.
+/// Use infinite query hook
 InfiniteQueryController<TData, TParams, TError>
 useInfiniteScrollQuery<TData, TParams, TError>({
   required Future<DAQInfiniteQueryResponse<TData>> Function(

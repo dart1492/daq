@@ -3,3 +3,5 @@
 2. Deduplication future cancellation
 
 3. Cache needs to have time to live
+
+4. Update dynamic docs

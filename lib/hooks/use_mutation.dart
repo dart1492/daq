@@ -1,37 +1,9 @@
 import 'package:daq/daq.dart';
 import 'package:daq/models/controllers/mutation_controller.dart';
 import 'package:daq/models/states/mutation_state.dart';
-import 'package:flutter/widgets.dart';
 import 'package:flutter_hooks/flutter_hooks.dart';
 
-/// A custom hook that manages mutation state and provides a clean API for POST, PUT, DELETE operations
-///
-/// Usage:
-/// ```dart
-/// final createUser = useMutation<User, CreateUserRequest, MyAppError>(
-///   mutationFn: (request) => api.createUser(request),
-///   errorTransformer: (error, stackTrace) => MyAppError()
-///   onMutating: (request) {
-///     // Called when mutation starts - useful for showing loading states
-///     showLoadingIndicator();
-///   },
-///   onSuccess: (user, request) {
-///     print('User created: ${user.id}');
-///     // Optionally invalidate related caches
-///     listController.refetchFromStart();
-///   },
-///   onError: (error, request) {
-///     showSnackBar('Failed to create user: $error');
-///   },
-/// );
-///
-/// // Trigger mutation
-/// createUser.mutate(CreateUserRequest(name: 'John'));
-///
-/// // Check state
-/// if (createUser.isLoading) { ... }
-/// if (createUser.isSuccess) { ... }
-/// ```
+/// Use mutation hook
 MutationController<TData, TVariables, TError>
 useMutation<TData, TVariables, TError>({
   required Future<TData> Function(TVariables variables) mutationFn,

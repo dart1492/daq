@@ -1,4 +1,4 @@
-import 'package:daq/utils/async_cache/events.dart';
+import 'package:daq/utils/daq_cache/events.dart';
 import 'cache_storage.dart';
 
 class CacheMutator {

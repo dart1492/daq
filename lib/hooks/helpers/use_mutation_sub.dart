@@ -1,28 +1,9 @@
 import 'dart:async';
 import 'package:flutter_hooks/flutter_hooks.dart';
-import 'package:daq/utils/async_cache/daq_cache.dart';
+import 'package:daq/utils/daq_cache/daq_cache.dart';
 import 'package:daq/utils/daq_logger.dart';
 
-/// A hook that subscribes to cache mutation events and triggers a callback when relevant keys are mutated
-///
-/// This hook handles three types of mutation matching:
-/// 1. Direct key matching - exact cache key matches
-/// 2. Pattern matching - regex pattern matching against cache keys
-/// 3. Tag matching - matching based on cache tags
-///
-/// Usage:
-/// ```dart
-/// useMutationSub<TData>(
-///   cache: cache,
-///   cacheKeys: ['my_key_1', 'my_key_2'],
-///   keyPattern: 'my_prefix_*',
-///   cacheTags: ['my_feature'],
-///   onMutated: (mutatedData) {
-///     // Handle mutation - e.g., update state with new data
-///     state.value = QueryState.success(mutatedData);
-///   },
-/// );
-/// ```
+/// Add mutation subscription to the query hook
 void useMutationSub<TData>({
   required DAQCache cache,
   List<String>? cacheKeys,

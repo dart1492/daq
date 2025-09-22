@@ -1,7 +1,7 @@
 import 'dart:async';
 
-import 'package:daq/utils/async_cache/cache_parts/daq_config.dart';
-import 'package:daq/utils/async_cache/events.dart';
+import 'package:daq/utils/daq_cache/cache_parts/daq_config.dart';
+import 'package:daq/utils/daq_cache/events.dart';
 import 'package:daq/utils/daq_logger.dart';
 import 'cache_parts/cache_storage.dart';
 import 'cache_parts/cache_invalidator.dart';

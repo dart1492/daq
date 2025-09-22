@@ -2,31 +2,9 @@ import 'dart:async';
 import 'package:daq/daq.dart';
 import 'package:daq/models/controllers/query_controller.dart';
 import 'package:daq/models/states/query_state.dart';
-import 'package:daq/hooks/helpers/use_invalidation_sub.dart';
-import 'package:daq/hooks/helpers/use_mutation_sub.dart';
 import 'package:flutter_hooks/flutter_hooks.dart';
 
-/// Hook for simple single object queries with caching
-///
-/// Usage:
-/// ```dart
-/// final userQuery = useQuery<User, int>(
-///   queryFn: (userId) => api.getUser(userId),
-///   cachePrefix: 'user',
-///   variables: 123,
-///   onSuccess: (user) {
-///     debugPrint('User loaded: ${user.name}');
-///   },
-///   onError: (error) {
-///     showSnackBar('Failed to load user: ${error.message}');
-///   },
-/// );
-///
-/// // Access state
-/// if (userQuery.isLoading) { ... }
-/// if (userQuery.isSuccess) { ... }
-/// final user = userQuery.data;
-/// ```
+/// Use query hook
 QueryController<TData, TParams, TError> useQuery<TData, TParams, TError>({
   required Future<TData> Function(TParams variables) queryFn,
 

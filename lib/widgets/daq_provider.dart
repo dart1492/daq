@@ -1,4 +1,4 @@
-import 'package:daq/utils/async_cache/index.dart';
+import 'package:daq/utils/daq_cache/index.dart';
 import 'package:flutter/material.dart';
 
 /// This can be used to provide a [QueryClient] throughout the application.

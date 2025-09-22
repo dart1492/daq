@@ -1,43 +1,10 @@
 import 'package:daq/daq.dart';
 import 'package:daq/models/controllers/paginated_query_controller.dart';
 import 'package:daq/models/states/paginated_query_state.dart';
-import 'package:daq/hooks/helpers/use_invalidation_sub.dart';
 import 'dart:async';
 import 'package:flutter_hooks/flutter_hooks.dart';
 
-/// A custom hook that manages paginated data fetching with caching support
-///
-/// Usage:
-/// ```dart
-/// final controller = usePaginatedQuery<ItemType, FilterType>(
-///   fetcher: (filters, page, pageSize) => fetchItems(filters, page, pageSize),
-///   cachePrefix: 'my_feature',
-///   initialFilters: MyFilters(),
-///   pageSize: 20,
-///   enableCache: true,
-///   autoFetch: true,
-///   cacheTags: ['my_feature'],
-/// );
-///
-/// // Access state and data
-/// if (controller.isLoading) {
-///   return LoadingSpinner();
-/// }
-///
-/// final items = controller.data;
-///
-/// // Control pagination
-/// controller.fetchNextPage();
-/// controller.fetchPreviousPage();
-/// controller.refetchFromStart();
-///
-/// // Filter management
-/// controller.updateFilters(newFilters);
-///
-/// // Cache management
-/// controller.clearCache();
-/// controller.clearFeatureCache();
-/// ```
+/// Paginated query hook
 PaginatedQueryController<TData, TParams, TError>
 usePaginatedQuery<TData, TParams, TError>({
   required Future<DAQPaginatedQueryResponse<TData>> Function(
