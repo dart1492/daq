@@ -1,7 +1,5 @@
 import 'dart:async';
 import 'package:daq/daq.dart';
-import 'package:daq/models/controllers/query_controller.dart';
-import 'package:daq/models/states/query_state.dart';
 import 'package:flutter_hooks/flutter_hooks.dart';
 
 /// Use query hook

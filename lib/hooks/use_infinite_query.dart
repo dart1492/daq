@@ -1,13 +1,10 @@
 // ignore_for_file: public_member_api_docs, sort_constructors_first
-
 import 'package:daq/daq.dart';
-import 'package:daq/models/controllers/infinite_query_controller.dart';
-import 'package:daq/models/states/infinite_query_state.dart';
 import 'package:flutter_hooks/flutter_hooks.dart';
 
 /// Use infinite query hook
 InfiniteQueryController<TData, TParams, TError>
-useInfiniteScrollQuery<TData, TParams, TError>({
+useInfiniteQuery<TData, TParams, TError>({
   required Future<DAQInfiniteQueryResponse<TData>> Function(
     TParams params,
     int page,
@@ -28,6 +25,13 @@ useInfiniteScrollQuery<TData, TParams, TError>({
   bool autoFetch = true,
 
   List<String>? cacheTags,
+
+  void Function(TParams parameters, DAQCache cacheInstance)? onLoading,
+
+  void Function(DAQInfiniteQueryResponse<TData>, DAQCache cacheInstance)?
+  onSuccess,
+
+  void Function(TError error, DAQCache cacheInstance)? onError,
 }) {
   final context = useContext();
 
@@ -50,6 +54,8 @@ useInfiniteScrollQuery<TData, TParams, TError>({
         parameters: newParameters ?? state.value.parameters,
         currentPage: 1,
       );
+
+      onLoading?.call(state.value.parameters, cache);
     }
 
     try {
@@ -62,7 +68,7 @@ useInfiniteScrollQuery<TData, TParams, TError>({
         );
 
         if (cachedResponse != null) {
-          DAQLogger.instance.paginatedQuery('Loading from cache: $cacheKey');
+          DAQLogger.instance.infiniteQuery('Loading from cache: $cacheKey');
           state.value = state.value.copyWith(
             data: cachedResponse.items,
             loadingState: InfiniteQueryLoadingState.success,
@@ -75,7 +81,7 @@ useInfiniteScrollQuery<TData, TParams, TError>({
         }
       }
 
-      DAQLogger.instance.paginatedQuery('Fetching from API: $cacheKey');
+      DAQLogger.instance.infiniteQuery('Fetching from API for: $cacheKey');
       final result = await fetcher(state.value.parameters, 1, pageSize);
 
       // Cache the result
@@ -91,11 +97,13 @@ useInfiniteScrollQuery<TData, TParams, TError>({
           totalItems: result.totalItems,
           hasNextPage: result.hasNextPage,
         );
+
+        onSuccess?.call(result, cache);
       }
     } on Object catch (error, stackTrace) {
       DAQLogger.instance.error(
         'Error occurred: $error',
-        'DAQ Paginated Query',
+        'DAQ Infinite Query',
         error,
       );
 
@@ -106,6 +114,8 @@ useInfiniteScrollQuery<TData, TParams, TError>({
           loadingState: InfiniteQueryLoadingState.error,
           error: transformedError,
         );
+
+        onError?.call(transformedError, cache);
       }
     }
   }
@@ -127,8 +137,8 @@ useInfiniteScrollQuery<TData, TParams, TError>({
     }
 
     try {
-      DAQLogger.instance.paginatedQuery(
-        'Loading next page by using the fetcher',
+      DAQLogger.instance.infiniteQuery(
+        'Loading next page from API for: ${generateCacheKey(state.value.parameters)}',
       );
 
       final result = await fetcher(state.value.parameters, nextPage, pageSize);
@@ -143,31 +153,30 @@ useInfiniteScrollQuery<TData, TParams, TError>({
         final cachedInfiniteResponse = cache
             .getValue<DAQInfiniteQueryResponse<TData>>(cacheKey);
 
-        cache.updateCache(
-          cacheKey,
-          cachedInfiniteResponse!.copyWith(
+        cache.updateCache(cacheKey, (prevResponse) {
+          return cachedInfiniteResponse!.copyWith(
             items: mergedAllItemsList,
             totalItems: result.totalItems,
             totalPages: result.totalPages,
             hasNextPage: result.hasNextPage,
             currentPage: nextPage,
-          ),
-        );
+          );
+        });
       }
 
-      if (context.mounted) {
-        state.value = state.value.copyWith(
-          data: mergedAllItemsList,
-          loadingState: InfiniteQueryLoadingState.success,
-          currentPage: nextPage,
-          totalItems: result.totalItems,
-          hasNextPage: result.hasNextPage,
-        );
-      }
+      // if (context.mounted) {
+      //   state.value = state.value.copyWith(
+      //     data: mergedAllItemsList,
+      //     loadingState: InfiniteQueryLoadingState.success,
+      //     currentPage: nextPage,
+      //     totalItems: result.totalItems,
+      //     hasNextPage: result.hasNextPage,
+      //   );
+      // }
     } on Object catch (error, stackTrace) {
       DAQLogger.instance.error(
         'Error occurred: $error',
-        'DAQ Paginated Query',
+        'DAQ Infinite Query',
         error,
       );
 
@@ -184,7 +193,7 @@ useInfiniteScrollQuery<TData, TParams, TError>({
 
   // Refetch from ground up (clear cache and start fresh)
   Future<void> refetchFromStart({TParams? newParameters}) async {
-    DAQLogger.instance.paginatedQuery(
+    DAQLogger.instance.infiniteQuery(
       'Refetching the whole list from the start',
     );
 
@@ -219,6 +228,7 @@ useInfiniteScrollQuery<TData, TParams, TError>({
     return null;
   }, [autoFetch]);
 
+  // invalidation sub
   useInvalidationSub(
     cache: cache,
     keyPattern: '${cachePrefix}_*',
@@ -227,6 +237,26 @@ useInfiniteScrollQuery<TData, TParams, TError>({
     onInvalidated: () {
       if (state.value.data.isNotEmpty) {
         refetchFromStart();
+      }
+    },
+  );
+
+  // Subscribe to cache mutation events
+  useMutationSub<DAQInfiniteQueryResponse<TData>>(
+    cache: cache,
+    cacheKeys: [generateCacheKey(state.value.parameters)],
+    cacheTags: cacheTags,
+    logPrefix: 'infinite query',
+    onMutated: (mutatedData) {
+      if (context.mounted) {
+        state.value = state.value.copyWith(
+          data: mutatedData.items,
+          totalItems: mutatedData.totalItems,
+          totalPages: mutatedData.totalPages,
+          hasNextPage: mutatedData.hasNextPage,
+          currentPage: mutatedData.currentPage,
+          loadingState: InfiniteQueryLoadingState.success,
+        );
       }
     },
   );

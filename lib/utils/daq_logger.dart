@@ -104,6 +104,10 @@ class DAQLogger {
     debug(_sanitizeMessage(message), 'DAQ Paginated Query');
   }
 
+  void infiniteQuery(String message) {
+    debug(_sanitizeMessage(message), 'DAQ Infinite Query');
+  }
+
   /// Log a general DAQ message
   void daq(String message) {
     debug(_sanitizeMessage(message), 'DAQ');

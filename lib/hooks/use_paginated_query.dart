@@ -1,6 +1,4 @@
 import 'package:daq/daq.dart';
-import 'package:daq/models/controllers/paginated_query_controller.dart';
-import 'package:daq/models/states/paginated_query_state.dart';
 import 'dart:async';
 import 'package:flutter_hooks/flutter_hooks.dart';
 

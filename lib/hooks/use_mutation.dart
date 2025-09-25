@@ -1,6 +1,4 @@
 import 'package:daq/daq.dart';
-import 'package:daq/models/controllers/mutation_controller.dart';
-import 'package:daq/models/states/mutation_state.dart';
 import 'package:flutter_hooks/flutter_hooks.dart';
 
 /// Use mutation hook
@@ -106,17 +104,12 @@ useMutation<TData, TVariables, TError>({
       if (context.mounted) {
         onSettled?.call();
       }
-
-      DAQLogger.instance.info(
-        'onSettled callback executed, final status: ${state.value.status}',
-        'DAQ Mutation',
-      );
     }
   }, [mutationFn, onSuccess, onError, onSettled, onMutating, timeout]);
 
   final reset = useCallback(() {
     DAQLogger.instance.info(
-      ' Resetting mutation state to initial',
+      'Resetting mutation state to initial',
       'DAQ Mutation',
     );
 

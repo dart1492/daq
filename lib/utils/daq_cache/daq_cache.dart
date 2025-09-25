@@ -68,6 +68,10 @@ class DAQCache {
     return _cacheStorage.getKeysByTag(tag);
   }
 
+  List<String> getKeysByPattern(String pattern) {
+    return _cacheStorage.getKeysByPattern(pattern);
+  }
+
   // =================== REQUEST DEDUPLICATION ===================
 
   bool hasInflightRequest(String key) {
@@ -111,8 +115,23 @@ class DAQCache {
 
   // =================== CACHE MUTATION ===================
 
-  void updateCache<T>(String key, T value, {List<String>? tags}) {
-    _cacheMutator.updateCache(key, value, tags: tags);
+  void updateCache<T>(
+    String key,
+    T Function(T?) updater, {
+    List<String>? tags,
+  }) {
+    _cacheMutator.updateCacheBySingleKey(
+      key,
+      updater(_cacheStorage.getValue(key)),
+      tags: tags,
+    );
+  }
+
+  void updateCacheBatch(
+    List<String> mutatedKeys,
+    Map<String, dynamic> mutatedData,
+  ) {
+    _cacheMutator.updateCacheBatch(mutatedKeys, mutatedData);
   }
 
   // =================== RESOURCE DISPOSAL ===================
