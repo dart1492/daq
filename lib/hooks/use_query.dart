@@ -69,7 +69,7 @@ QueryController<TData, TParams, TError> useQuery<TData, TParams, TError>({
 
         bool isAlive = false;
 
-        final globalTTL = cache.config.ttlConfig?.defaultQueryTTL;
+        final globalTTL = cache.config.ttlConfig.defaultQueryTTL;
 
         final usedTTL = globalTTL ?? timeToLive;
 
