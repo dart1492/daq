@@ -19,14 +19,16 @@ QueryController<TData, TParams, TError> useQuery<TData, TParams, TError>({
 
   bool enableCache = true,
 
-  /// Shows if we should cache the prefix + parameters unique hash. If this is false- we only cache for the prefix and the parameters can come and go.
-  bool enableCacheForParameters = true,
-
   bool autoFetch = true,
 
-  Duration? timeout,
-
   List<String>? cacheTags,
+
+  /// Optional override of the default time to live for the useQuery, that is provided by DAQConfig.
+  /// If both are null the cache lives on forever.
+  Duration? timeToLive,
+
+  /// to disable timer that periodically re-fetches when the cache si no longer valid.
+  bool? enablePeriodicTTLRefetch,
 }) {
   final context = useContext();
 
@@ -36,42 +38,64 @@ QueryController<TData, TParams, TError> useQuery<TData, TParams, TError>({
 
   final state = useState<QueryState<TData, TError>>(QueryState.initial());
 
+  void mountGate(Function fn) {
+    if (!context.mounted) return;
+
+    fn();
+  }
+
   String generateCacheKey(TParams variables) {
-    if (enableCacheForParameters) {
-      return '${cachePrefix}_${variables.hashCode}';
-    } else {
-      return cachePrefix;
-    }
+    return '${cachePrefix}_${variables.hashCode}';
   }
 
   Future<void> fetch({TParams? newParameters}) async {
     final currentParameters = newParameters ?? parameters;
 
-    onLoading?.call(currentParameters);
+    mountGate(() {
+      onLoading?.call(currentParameters);
 
-    if (context.mounted) {
       state.value = state.value.copyWith(
         status: QueryLoadingState.loading,
         error: null,
       );
-    }
+    });
 
     try {
       final cacheKey = generateCacheKey(currentParameters);
 
+      // cache is enabled and an entry is present
       if (enableCache && cache.hasKey(cacheKey)) {
-        final cachedData = cache.getValue<TData>(cacheKey);
-        if (cachedData != null) {
+        final cacheEntry = cache.getEntry<TData>(cacheKey)!;
+
+        bool isAlive = false;
+
+        final globalTTL = cache.config.ttlConfig?.defaultQueryTTL;
+
+        final usedTTL = globalTTL ?? timeToLive;
+
+        if (usedTTL != null) {
+          DateTime now = DateTime.now();
+
+          if (now.difference(cacheEntry.lastWriteTime) < usedTTL) {
+            isAlive = true;
+          } else {
+            DAQLogger.instance.query(
+              'Cache for the: $cacheKey has outlived its time.',
+            );
+          }
+        }
+
+        if (isAlive) {
           DAQLogger.instance.query('Loading from cache: $cacheKey');
 
-          if (context.mounted) {
+          mountGate(() {
             state.value = QueryState(
               status: QueryLoadingState.success,
-              data: cachedData,
+              data: cacheEntry.value,
             );
 
-            onSuccess?.call(cachedData);
-          }
+            onSuccess?.call(cacheEntry.value);
+          });
 
           return;
         }
@@ -84,15 +108,11 @@ QueryController<TData, TParams, TError> useQuery<TData, TParams, TError>({
           'Executing the query function for: $cacheKey (NO CACHING)',
         );
         // if the caching is disabled for this query - just execute it, without adding the request to the duplication map.
-        if (timeout != null) {
-          result = await queryFn(currentParameters).timeout(timeout);
-        } else {
-          result = await queryFn(currentParameters);
-        }
+        await queryFn(currentParameters);
       } else {
         if (!cache.hasInflightRequest(cacheKey)) {
           DAQLogger.instance.query(
-            'Executing the query function for: $cacheKey ()',
+            'Executing the query function for: $cacheKey (). Time to live: ${timeToLive ?? cache.config.ttlConfig.defaultQueryTTL}',
           );
         } else {
           DAQLogger.instance.query(
@@ -100,42 +120,38 @@ QueryController<TData, TParams, TError> useQuery<TData, TParams, TError>({
           );
         }
 
-        // perform the request by first checking if it's running already
+        // check if the request is running already
         result = await cache.executeWithDeduplication<TData>(
           cacheKey,
           () async {
-            if (timeout != null) {
-              return await queryFn(currentParameters).timeout(timeout);
-            } else {
-              return await queryFn(currentParameters);
-            }
+            return await queryFn(currentParameters);
           },
           tags: cacheTags,
         );
       }
 
-      if (context.mounted) {
+      mountGate(() {
         state.value = QueryState(
           data: result,
           status: QueryLoadingState.success,
         );
 
         onSuccess?.call(result);
-      }
+      });
     } on Object catch (error, stackTrace) {
       final transformedError = errorTransformer(error, stackTrace);
 
       DAQLogger.instance.error('Error occurred: $error', 'DAQ Query', error);
 
-      if (context.mounted) {
+      mountGate(() {
         state.value = QueryState.error(transformedError);
 
         onError?.call(transformedError);
-      }
+      });
     } finally {
-      if (context.mounted) {
+      mountGate(() {
         onSettled?.call();
-      }
+      });
     }
   }
 
@@ -154,22 +170,11 @@ QueryController<TData, TParams, TError> useQuery<TData, TParams, TError>({
     await fetch();
   }
 
-  /// Refetch with the new parameters. Won't refetch if the [enableCacheForParameters] is set to false.
   void updateParams(TParams newParameters) {
     if (newParameters != parameters) {
       fetch(newParameters: newParameters);
     }
   }
-
-  // Auto-fetch on mount hook
-  useEffect(() {
-    if (autoFetch &&
-        state.value.data == null &&
-        state.value.status != QueryLoadingState.loading) {
-      fetch();
-    }
-    return null;
-  }, [autoFetch]);
 
   // Subscribe to cache invalidation events
   useInvalidationSub(
@@ -196,6 +201,40 @@ QueryController<TData, TParams, TError> useQuery<TData, TParams, TError>({
       onSuccess?.call(mutatedData);
     },
   );
+
+  final isTTLRefreshEnabled =
+      enablePeriodicTTLRefetch ??
+      cache.config.ttlConfig.enablePeriodicTTLRefresh;
+
+  if (isTTLRefreshEnabled) {
+    if (cache.config.ttlConfig.defaultQueryTTL != null || timeToLive != null) {
+      final realTTL = (timeToLive ?? cache.config.ttlConfig.defaultQueryTTL)!;
+
+      useTTLSub(
+        cache: cache,
+        cacheKeys: [generateCacheKey(parameters)],
+        logPrefix: 'query',
+        timeToLive: realTTL,
+        checkInterval: realTTL + Duration(seconds: 5), // a slight increase,
+        onExpired: () {
+          // Only refetch if we have data
+          if (state.value.data != null) {
+            fetch();
+          }
+        },
+      );
+    }
+  }
+
+  // Auto-fetch on mount hook
+  useEffect(() {
+    if (autoFetch &&
+        state.value.data == null &&
+        state.value.status != QueryLoadingState.loading) {
+      fetch();
+    }
+    return null;
+  }, [autoFetch]);
 
   return QueryController(
     state: state.value,

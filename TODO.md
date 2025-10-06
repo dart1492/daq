@@ -1,7 +1,3 @@
-1. Add modification (cache mutation) support for different kinds of queries and filter configs.
+1. Add refetch on app focus (when the app is opened from the background again)
 
-2. Deduplication future cancellation
-
-3. Cache needs to have time to live
-
-4. Update dynamic docs
+2. Work with network state (for example refetch when the network is switched from offline to online)

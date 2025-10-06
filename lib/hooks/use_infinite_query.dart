@@ -32,6 +32,14 @@ useInfiniteQuery<TData, TParams, TError>({
   onSuccess,
 
   void Function(TError error, DAQCache cacheInstance)? onError,
+
+  /// Optional override of the default time to live for the useQuery, that is provided by DAQConfig.
+  /// If both are null the cache lives on forever.
+  Duration? timeToLive,
+
+  /// to disable timer that periodically re-fetches when the cache si no longer valid.
+  /// This value overrides the global value, set in the [DAQConfig]
+  bool? enablePeriodicTTLRefetch,
 }) {
   final context = useContext();
 
@@ -63,12 +71,33 @@ useInfiniteQuery<TData, TParams, TError>({
 
       // Check cache first
       if (enableCache && cache.hasKey(cacheKey)) {
-        final cachedResponse = cache.getValue<DAQInfiniteQueryResponse<TData>>(
+        final cacheEntry = cache.getEntry<DAQInfiniteQueryResponse<TData>>(
           cacheKey,
-        );
+        )!;
 
-        if (cachedResponse != null) {
+        bool isAlive = false;
+
+        final globalTTL = cache.config.ttlConfig.defaultQueryTTL;
+
+        final usedTTL = globalTTL ?? timeToLive;
+
+        // check if this entry is viable
+        if (usedTTL != null) {
+          DateTime now = DateTime.now();
+
+          if (now.difference(cacheEntry.lastWriteTime) < usedTTL) {
+            isAlive = true;
+          } else {
+            DAQLogger.instance.infiniteQuery(
+              'Cache for the: $cacheKey has outlived its time.',
+            );
+          }
+        }
+
+        if (isAlive) {
+          final cachedResponse = cacheEntry.value;
           DAQLogger.instance.infiniteQuery('Loading from cache: $cacheKey');
+
           state.value = state.value.copyWith(
             data: cachedResponse.items,
             loadingState: InfiniteQueryLoadingState.success,
@@ -77,11 +106,14 @@ useInfiniteQuery<TData, TParams, TError>({
             hasNextPage: cachedResponse.hasNextPage,
             currentPage: cachedResponse.currentPage,
           );
+
           return;
         }
       }
 
-      DAQLogger.instance.infiniteQuery('Fetching from API for: $cacheKey');
+      DAQLogger.instance.infiniteQuery(
+        'Fetching from API for: $cacheKey. Time to live: ${timeToLive ?? cache.config.ttlConfig.defaultInfiniteQueryTTL} ',
+      );
       final result = await fetcher(state.value.parameters, 1, pageSize);
 
       // Cache the result
@@ -163,16 +195,6 @@ useInfiniteQuery<TData, TParams, TError>({
           );
         });
       }
-
-      // if (context.mounted) {
-      //   state.value = state.value.copyWith(
-      //     data: mergedAllItemsList,
-      //     loadingState: InfiniteQueryLoadingState.success,
-      //     currentPage: nextPage,
-      //     totalItems: result.totalItems,
-      //     hasNextPage: result.hasNextPage,
-      //   );
-      // }
     } on Object catch (error, stackTrace) {
       DAQLogger.instance.error(
         'Error occurred: $error',
@@ -220,14 +242,6 @@ useInfiniteQuery<TData, TParams, TError>({
     }
   }
 
-  // Auto-fetch on mount
-  useEffect(() {
-    if (autoFetch && state.value.data.isEmpty && !state.value.isLoading) {
-      fetch();
-    }
-    return null;
-  }, [autoFetch]);
-
   // invalidation sub
   useInvalidationSub(
     cache: cache,
@@ -260,6 +274,36 @@ useInfiniteQuery<TData, TParams, TError>({
       }
     },
   );
+
+  final isTTLRefreshEnabled =
+      enablePeriodicTTLRefetch ??
+      cache.config.ttlConfig.enablePeriodicTTLRefresh;
+
+  if (isTTLRefreshEnabled) {
+    if (cache.config.ttlConfig.defaultInfiniteQueryTTL != null ||
+        timeToLive != null) {
+      final realTTL =
+          (timeToLive ?? cache.config.ttlConfig.defaultInfiniteQueryTTL)!;
+
+      useTTLSub(
+        cache: cache,
+        cacheKeys: [generateCacheKey(state.value.parameters)],
+        timeToLive: realTTL,
+        checkInterval: realTTL + Duration(seconds: 5), // a slight increase
+        onExpired: () {
+          refetchFromStart();
+        },
+      );
+    }
+  }
+
+  // Auto-fetch on mount
+  useEffect(() {
+    if (autoFetch && state.value.data.isEmpty && !state.value.isLoading) {
+      fetch();
+    }
+    return null;
+  }, [autoFetch]);
 
   // Check if can load more
   final canLoadMore =

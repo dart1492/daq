@@ -1,11 +1,15 @@
+// ignore_for_file: public_member_api_docs, sort_constructors_first
 /// Core storage operations - so basically a wrapper around the Map object
 class CacheStorage {
-  final Map<String, dynamic> _cacheInstance = {};
+  final Map<String, CacheEntry> _cacheInstance = {};
   final Map<String, Set<String>> _keyTags = {}; // key -> tags
 
   /// Add value to cache with optional tags
   void addToCache<T>(String key, T value, {List<String>? tags}) {
-    _cacheInstance[key] = value;
+    _cacheInstance[key] = CacheEntry<T>(
+      value: value,
+      lastWriteTime: DateTime.now(),
+    );
 
     // Store tags for this key if provided
     if (tags != null && tags.isNotEmpty) {
@@ -13,11 +17,21 @@ class CacheStorage {
     }
   }
 
+  CacheEntry<T>? getEntry<T>(String key) {
+    final entry = _cacheInstance[key];
+
+    if (entry != null) {
+      return entry as CacheEntry<T>;
+    }
+
+    return null;
+  }
+
   /// Get value from cache
   T? getValue<T>(String key) {
-    final value = _cacheInstance[key];
-    if (value is T) {
-      return value;
+    final entry = _cacheInstance[key];
+    if (entry?.value is T?) {
+      return entry?.value;
     }
     return null;
   }
@@ -87,4 +101,17 @@ class CacheStorage {
 
   /// Get raw key tags (for internal use)
   Map<String, Set<String>> get keyTags => _keyTags;
+}
+
+class CacheEntry<T> {
+  DateTime lastWriteTime;
+  T value;
+  CacheEntry({required this.lastWriteTime, required this.value});
+
+  CacheEntry<T> copyWith({DateTime? lastWriteTime, T? value}) {
+    return CacheEntry<T>(
+      lastWriteTime: lastWriteTime ?? this.lastWriteTime,
+      value: value ?? this.value,
+    );
+  }
 }

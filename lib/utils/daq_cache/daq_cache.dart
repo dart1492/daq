@@ -37,7 +37,11 @@ class DAQCache {
   // =================== CACHE STORAGE DELEGATION ===================
 
   void addToCache<T>(String key, T value, {List<String>? tags}) {
-    _cacheStorage.addToCache(key, value, tags: tags);
+    _cacheStorage.addToCache<T>(key, value, tags: tags);
+  }
+
+  CacheEntry<T>? getEntry<T>(String key) {
+    return _cacheStorage.getEntry<T>(key);
   }
 
   T? getValue<T>(String key) {
@@ -93,7 +97,6 @@ class DAQCache {
       requestFn,
     );
 
-    // Cache the result
     addToCache(key, result, tags: tags);
 
     return result;
