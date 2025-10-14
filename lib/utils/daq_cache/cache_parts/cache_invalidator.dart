@@ -15,7 +15,7 @@ class CacheInvalidator {
       _invalidationController.stream;
 
   /// Invalidate cache by pattern (e.g., "user_*", "bookings_*")
-  void invalidateByPattern(String pattern) {
+  void invalidateByPattern(String pattern, {bool emitEvent = true}) {
     final keysToInvalidate = _cacheStorage.getKeysByPattern(pattern);
 
     // Remove invalidated keys
@@ -25,17 +25,19 @@ class CacheInvalidator {
 
     // Notify listeners
     if (keysToInvalidate.isNotEmpty) {
-      _invalidationController.add(
-        CacheInvalidationEvent(
-          invalidatedKeys: keysToInvalidate,
-          pattern: pattern,
-        ),
-      );
+      if (emitEvent) {
+        _invalidationController.add(
+          CacheInvalidationEvent(
+            invalidatedKeys: keysToInvalidate,
+            pattern: pattern,
+          ),
+        );
+      }
     }
   }
 
   /// Invalidate cache by tags (e.g., ["user", "profile"])
-  void invalidateByTags(List<String> tags) {
+  void invalidateByTags(List<String> tags, {bool emitEvent = true}) {
     final keysToInvalidate = _cacheStorage.getKeysByTags(tags);
 
     for (final key in keysToInvalidate) {
@@ -43,15 +45,17 @@ class CacheInvalidator {
     }
 
     if (keysToInvalidate.isNotEmpty) {
-      _invalidationController.add(
-        CacheInvalidationEvent(invalidatedKeys: keysToInvalidate, tags: tags),
-      );
+      if (emitEvent) {
+        _invalidationController.add(
+          CacheInvalidationEvent(invalidatedKeys: keysToInvalidate, tags: tags),
+        );
+      }
     }
   }
 
   /// Invalidate specific cache keys
   /// The full key has to be provided to invalidate the instance. So if the user, for example, has been provided with the parameter of id - we need to provide the user_{id.hasCode} to invalidate it.
-  void invalidateKeys(List<String> keys) {
+  void invalidateKeys(List<String> keys, {bool emitEvent = true}) {
     final validKeysToInvalidate = keys
         .where((key) => _cacheStorage.hasKey(key))
         .toList();
@@ -62,9 +66,11 @@ class CacheInvalidator {
 
     // Notify listeners
     if (validKeysToInvalidate.isNotEmpty) {
-      _invalidationController.add(
-        CacheInvalidationEvent(invalidatedKeys: validKeysToInvalidate),
-      );
+      if (emitEvent) {
+        _invalidationController.add(
+          CacheInvalidationEvent(invalidatedKeys: validKeysToInvalidate),
+        );
+      }
     }
   }
 

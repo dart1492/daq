@@ -104,16 +104,16 @@ class DAQCache {
 
   // =================== CACHE INVALIDATION ===================
 
-  void invalidateByPattern(String pattern) {
-    _cacheInvalidator.invalidateByPattern(pattern);
+  void invalidateByPattern(String pattern, {bool emitEvent = true}) {
+    _cacheInvalidator.invalidateByPattern(pattern, emitEvent: emitEvent);
   }
 
-  void invalidateByTags(List<String> tags) {
-    _cacheInvalidator.invalidateByTags(tags);
+  void invalidateByTags(List<String> tags, {bool emitEvent = true}) {
+    _cacheInvalidator.invalidateByTags(tags, emitEvent: emitEvent);
   }
 
-  void invalidateKeys(List<String> keys) {
-    _cacheInvalidator.invalidateKeys(keys);
+  void invalidateKeys(List<String> keys, {bool emitEvent = true}) {
+    _cacheInvalidator.invalidateKeys(keys, emitEvent: emitEvent);
   }
 
   // =================== CACHE MUTATION ===================
@@ -122,19 +122,26 @@ class DAQCache {
     String key,
     T Function(T?) updater, {
     List<String>? tags,
+    bool emitEvent = true,
   }) {
-    _cacheMutator.updateCacheBySingleKey(
+    _cacheMutator.updateCacheBySingleKey<T>(
       key,
       updater(_cacheStorage.getValue(key)),
       tags: tags,
+      emitEvent: emitEvent,
     );
   }
 
   void updateCacheBatch(
     List<String> mutatedKeys,
-    Map<String, dynamic> mutatedData,
-  ) {
-    _cacheMutator.updateCacheBatch(mutatedKeys, mutatedData);
+    Map<String, dynamic> mutatedData, {
+    bool emitEvent = true,
+  }) {
+    _cacheMutator.updateCacheBatch(
+      mutatedKeys,
+      mutatedData,
+      emitEvent: emitEvent,
+    );
   }
 
   // =================== RESOURCE DISPOSAL ===================

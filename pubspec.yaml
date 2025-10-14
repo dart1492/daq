@@ -1,6 +1,6 @@
 name: daq
 description: "A Flutter package for handling asynchronous queries and mutations with object-hash based caching, re-fetching, reactive cache invalidations and updates, and many more features incoming!"
-version: 0.0.3
+version: 0.0.4
 homepage: https://github.com/dart1492/daq
 
 environment:

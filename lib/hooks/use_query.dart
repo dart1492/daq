@@ -1,5 +1,6 @@
 import 'dart:async';
 import 'package:daq/daq.dart';
+import 'package:flutter/material.dart';
 import 'package:flutter_hooks/flutter_hooks.dart';
 
 /// Use query hook
@@ -26,6 +27,10 @@ QueryController<TData, TParams, TError> useQuery<TData, TParams, TError>({
   /// Optional override of the default time to live for the useQuery, that is provided by DAQConfig.
   /// If both are null the cache lives on forever.
   Duration? timeToLive,
+
+  /// An app lifecycle hook that allows to perform a refetch when the app is coming from an inactive state (when the user has switched to another app, or hid this one, etc.)
+  /// Be default is turned off.
+  bool? refetchOnAppFromInactiveToResumed,
 
   /// to disable timer that periodically re-fetches when the cache si no longer valid.
   bool? enablePeriodicTTLRefetch,
@@ -67,11 +72,11 @@ QueryController<TData, TParams, TError> useQuery<TData, TParams, TError>({
       if (enableCache && cache.hasKey(cacheKey)) {
         final cacheEntry = cache.getEntry<TData>(cacheKey)!;
 
-        bool isAlive = false;
+        bool isAlive = true;
 
         final globalTTL = cache.config.ttlConfig.defaultQueryTTL;
 
-        final usedTTL = globalTTL ?? timeToLive;
+        final usedTTL = timeToLive ?? globalTTL;
 
         if (usedTTL != null) {
           DateTime now = DateTime.now();
@@ -79,6 +84,7 @@ QueryController<TData, TParams, TError> useQuery<TData, TParams, TError>({
           if (now.difference(cacheEntry.lastWriteTime) < usedTTL) {
             isAlive = true;
           } else {
+            isAlive = false;
             DAQLogger.instance.query(
               'Cache for the: $cacheKey has outlived its time.',
             );
@@ -108,7 +114,7 @@ QueryController<TData, TParams, TError> useQuery<TData, TParams, TError>({
           'Executing the query function for: $cacheKey (NO CACHING)',
         );
         // if the caching is disabled for this query - just execute it, without adding the request to the duplication map.
-        await queryFn(currentParameters);
+        result = await queryFn(currentParameters);
       } else {
         if (!cache.hasInflightRequest(cacheKey)) {
           DAQLogger.instance.query(
@@ -174,6 +180,16 @@ QueryController<TData, TParams, TError> useQuery<TData, TParams, TError>({
     if (newParameters != parameters) {
       fetch(newParameters: newParameters);
     }
+  }
+
+  if (refetchOnAppFromInactiveToResumed == true) {
+    useOnAppLifecycleStateChange((prevState, newState) {
+      // if the user has switched to some other app and came back to this one - we need to refetch whats on the screen
+      if (prevState == AppLifecycleState.inactive &&
+          newState == AppLifecycleState.resumed) {
+        refetch();
+      }
+    });
   }
 
   // Subscribe to cache invalidation events

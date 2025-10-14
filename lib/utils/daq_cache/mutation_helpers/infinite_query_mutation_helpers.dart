@@ -10,9 +10,6 @@ extension InfiniteQueryMutationHelpers on DAQCache {
     required Function(T) matcher,
     required Function(T) updater,
   }) {
-    final mutatedKeys = <String>[];
-    final mutatedData = <String, dynamic>{};
-
     final allKeys = getKeysByPattern('${keyPrefix}_*');
 
     for (String key in allKeys) {
@@ -29,14 +26,13 @@ extension InfiniteQueryMutationHelpers on DAQCache {
         }).toList();
 
         final updatedResponse = singleResponse.copyWith(items: updatedItems);
-        addToCache(key, updatedResponse);
-        mutatedKeys.add(key);
-        mutatedData[key] = updatedResponse;
-      }
-    }
 
-    if (mutatedKeys.isNotEmpty) {
-      updateCacheBatch(mutatedKeys, mutatedData);
+        updateCache<DAQInfiniteQueryResponse<T>>(key, (prevResponse) {
+          return updatedResponse;
+        });
+
+        //   addToCache<DAQInfiniteQueryResponse<T>>(key, updatedResponse);
+      }
     }
   }
 }

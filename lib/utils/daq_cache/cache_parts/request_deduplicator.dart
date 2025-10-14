@@ -1,6 +1,5 @@
 /// Handles request deduplication to avoid duplicate requests for the same key
 ///
-/// //TODO: THINK ABOUT THE FUTURES THAT ARE STILL RUNNING WHEN WE REBUILD THE CACHE ISNTANCE - NEED SOME WAY TO CANCEL THE FUTURE
 class RequestDeduplicator {
   // to avoid request duplication on one key
   final Map<String, Future<dynamic>> _inflightRequests = {};

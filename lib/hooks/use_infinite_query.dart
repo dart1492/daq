@@ -1,5 +1,6 @@
 // ignore_for_file: public_member_api_docs, sort_constructors_first
 import 'package:daq/daq.dart';
+import 'package:flutter/material.dart';
 import 'package:flutter_hooks/flutter_hooks.dart';
 
 /// Use infinite query hook
@@ -36,6 +37,10 @@ useInfiniteQuery<TData, TParams, TError>({
   /// Optional override of the default time to live for the useQuery, that is provided by DAQConfig.
   /// If both are null the cache lives on forever.
   Duration? timeToLive,
+
+  /// An app lifecycle hook that allows to perform a refetch when the app is coming from an inactive state (when the user has switched to another app, or hid this one, etc.)
+  /// Be default is turned off.
+  bool? refetchOnAppFromInactiveToResumed,
 
   /// to disable timer that periodically re-fetches when the cache si no longer valid.
   /// This value overrides the global value, set in the [DAQConfig]
@@ -75,11 +80,11 @@ useInfiniteQuery<TData, TParams, TError>({
           cacheKey,
         )!;
 
-        bool isAlive = false;
+        bool isAlive = true;
 
         final globalTTL = cache.config.ttlConfig.defaultQueryTTL;
 
-        final usedTTL = globalTTL ?? timeToLive;
+        final usedTTL = timeToLive ?? globalTTL;
 
         // check if this entry is viable
         if (usedTTL != null) {
@@ -88,6 +93,7 @@ useInfiniteQuery<TData, TParams, TError>({
           if (now.difference(cacheEntry.lastWriteTime) < usedTTL) {
             isAlive = true;
           } else {
+            isAlive = false;
             DAQLogger.instance.infiniteQuery(
               'Cache for the: $cacheKey has outlived its time.',
             );
@@ -240,6 +246,16 @@ useInfiniteQuery<TData, TParams, TError>({
     if (newParameters != state.value.parameters) {
       fetch(newParameters: newParameters);
     }
+  }
+
+  if (refetchOnAppFromInactiveToResumed == true) {
+    useOnAppLifecycleStateChange((prevState, newState) {
+      // if the user has switched to some other app and came back to this one - we need to refetch whats on the screen
+      if (prevState == AppLifecycleState.inactive &&
+          newState == AppLifecycleState.resumed) {
+        refetchFromStart();
+      }
+    });
   }
 
   // invalidation sub

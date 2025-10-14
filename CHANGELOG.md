@@ -13,3 +13,9 @@ I have also added:
 - Time to live. Now configurable for `useQuery()` and `useInfiniteQuery()` (can be set for each hook usage individually or in the DAQProvider configuration globally). Works in a reactive way (with the timer going under the hood that will refetch the query if it's time has come). This feature is only implemented in it's basic form and needs some more work on edge-cases (think about internet connectivity, bringing the app from background state - that kind of stuff).
 
 - Helper methods to work with cache mutations (still need more work).
+
+## 0.0.4
+
+Bug fixes related to the cache time to live.
+
+Added ability to refetch on applifecycle resumed
