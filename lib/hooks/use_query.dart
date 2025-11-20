@@ -39,9 +39,9 @@ QueryController<TData, TParams, TError> useQuery<TData, TParams, TError>({
 
   final cache = useDAQCache();
 
-  // DAQLogger is now used directly instead of daqDebugPrint
-
-  final state = useState<QueryState<TData, TError>>(QueryState.initial());
+  final state = useState<QueryState<TData, TError, TParams>>(
+    QueryState(status: QueryLoadingState.idle, params: parameters),
+  );
 
   void mountGate(Function fn) {
     if (!context.mounted) return;
@@ -54,7 +54,7 @@ QueryController<TData, TParams, TError> useQuery<TData, TParams, TError>({
   }
 
   Future<void> fetch({TParams? newParameters}) async {
-    final currentParameters = newParameters ?? parameters;
+    final currentParameters = newParameters ?? state.value.params;
 
     mountGate(() {
       onLoading?.call(currentParameters);
@@ -62,6 +62,7 @@ QueryController<TData, TParams, TError> useQuery<TData, TParams, TError>({
       state.value = state.value.copyWith(
         status: QueryLoadingState.loading,
         error: null,
+        params: currentParameters,
       );
     });
 
@@ -72,32 +73,29 @@ QueryController<TData, TParams, TError> useQuery<TData, TParams, TError>({
       if (enableCache && cache.hasKey(cacheKey)) {
         final cacheEntry = cache.getEntry<TData>(cacheKey)!;
 
-        bool isAlive = true;
-
         final globalTTL = cache.config.ttlConfig.defaultQueryTTL;
 
         final usedTTL = timeToLive ?? globalTTL;
 
-        if (usedTTL != null) {
-          DateTime now = DateTime.now();
+        bool isAlive = DAQUtilFunctions.checkIsAlive(
+          lastWrite: cacheEntry.lastWriteTime,
+          ttl: usedTTL,
+        );
 
-          if (now.difference(cacheEntry.lastWriteTime) < usedTTL) {
-            isAlive = true;
-          } else {
-            isAlive = false;
-            DAQLogger.instance.query(
-              'Cache for the: $cacheKey has outlived its time.',
-            );
-          }
+        if (!isAlive) {
+          DAQLogger.instance.query(
+            'Cache for the: $cacheKey has outlived its time.',
+          );
         }
 
         if (isAlive) {
           DAQLogger.instance.query('Loading from cache: $cacheKey');
 
           mountGate(() {
-            state.value = QueryState(
+            state.value = QueryState<TData, TError, TParams>(
               status: QueryLoadingState.success,
               data: cacheEntry.value,
+              params: currentParameters,
             );
 
             onSuccess?.call(cacheEntry.value);
@@ -116,17 +114,10 @@ QueryController<TData, TParams, TError> useQuery<TData, TParams, TError>({
         // if the caching is disabled for this query - just execute it, without adding the request to the duplication map.
         result = await queryFn(currentParameters);
       } else {
-        if (!cache.hasInflightRequest(cacheKey)) {
-          DAQLogger.instance.query(
-            'Executing the query function for: $cacheKey (). Time to live: ${timeToLive ?? cache.config.ttlConfig.defaultQueryTTL}',
-          );
-        } else {
-          DAQLogger.instance.query(
-            'Request for: $cacheKey is already running - waiting to be completed',
-          );
-        }
+        DAQLogger.instance.query(
+          'Request for: $cacheKey. Time to live: ${timeToLive ?? cache.config.ttlConfig.defaultQueryTTL}',
+        );
 
-        // check if the request is running already
         result = await cache.executeWithDeduplication<TData>(
           cacheKey,
           () async {
@@ -136,10 +127,15 @@ QueryController<TData, TParams, TError> useQuery<TData, TParams, TError>({
         );
       }
 
+      cache.config.globalHandlersConfig?.onSuccess?.call(
+        GlobalSuccessEvent(type: GlobalEvenTypes.query, data: result),
+      );
+
       mountGate(() {
-        state.value = QueryState(
+        state.value = QueryState<TData, TError, TParams>(
           data: result,
           status: QueryLoadingState.success,
+          params: currentParameters,
         );
 
         onSuccess?.call(result);
@@ -149,8 +145,12 @@ QueryController<TData, TParams, TError> useQuery<TData, TParams, TError>({
 
       DAQLogger.instance.error('Error occurred: $error', 'DAQ Query', error);
 
+      cache.config.globalHandlersConfig?.onError?.call(
+        GlobalErrorEvent(type: GlobalEvenTypes.query, data: transformedError),
+      );
+
       mountGate(() {
-        state.value = QueryState.error(transformedError);
+        state.value = QueryState.error(transformedError, state.value.params);
 
         onError?.call(transformedError);
       });
@@ -163,7 +163,7 @@ QueryController<TData, TParams, TError> useQuery<TData, TParams, TError>({
 
   Future<void> refetch() async {
     // Clear cache for this query
-    final cacheKey = generateCacheKey(parameters);
+    final cacheKey = generateCacheKey(state.value.params!);
 
     DAQLogger.instance.query(
       'Refetching for the $cacheKey (Clearing cache and fetching again)',
@@ -177,7 +177,7 @@ QueryController<TData, TParams, TError> useQuery<TData, TParams, TError>({
   }
 
   void updateParams(TParams newParameters) {
-    if (newParameters != parameters) {
+    if (newParameters != state.value.params) {
       fetch(newParameters: newParameters);
     }
   }
@@ -195,7 +195,7 @@ QueryController<TData, TParams, TError> useQuery<TData, TParams, TError>({
   // Subscribe to cache invalidation events
   useInvalidationSub(
     cache: cache,
-    cacheKeys: [generateCacheKey(parameters)],
+    cacheKeys: [generateCacheKey(state.value.params)],
     cacheTags: cacheTags,
     logPrefix: 'query',
     onInvalidated: () {
@@ -209,11 +209,15 @@ QueryController<TData, TParams, TError> useQuery<TData, TParams, TError>({
   // Subscribe to cache mutation events
   useMutationSub<TData>(
     cache: cache,
-    cacheKeys: [generateCacheKey(parameters)],
+    cacheKeys: [generateCacheKey(state.value.params)],
     cacheTags: cacheTags,
     logPrefix: 'query',
     onMutated: (mutatedData) {
-      state.value = QueryState<TData, TError>.success(mutatedData);
+      state.value = QueryState<TData, TError, TParams>(
+        status: QueryLoadingState.success,
+        data: mutatedData,
+        params: state.value.params,
+      );
       onSuccess?.call(mutatedData);
     },
   );

@@ -80,24 +80,19 @@ useInfiniteQuery<TData, TParams, TError>({
           cacheKey,
         )!;
 
-        bool isAlive = true;
-
         final globalTTL = cache.config.ttlConfig.defaultQueryTTL;
 
         final usedTTL = timeToLive ?? globalTTL;
 
-        // check if this entry is viable
-        if (usedTTL != null) {
-          DateTime now = DateTime.now();
+        bool isAlive = DAQUtilFunctions.checkIsAlive(
+          lastWrite: cacheEntry.lastWriteTime,
+          ttl: usedTTL,
+        );
 
-          if (now.difference(cacheEntry.lastWriteTime) < usedTTL) {
-            isAlive = true;
-          } else {
-            isAlive = false;
-            DAQLogger.instance.infiniteQuery(
-              'Cache for the: $cacheKey has outlived its time.',
-            );
-          }
+        if (!isAlive) {
+          DAQLogger.instance.query(
+            'Cache for the: $cacheKey has outlived its time.',
+          );
         }
 
         if (isAlive) {
@@ -120,12 +115,26 @@ useInfiniteQuery<TData, TParams, TError>({
       DAQLogger.instance.infiniteQuery(
         'Fetching from API for: $cacheKey. Time to live: ${timeToLive ?? cache.config.ttlConfig.defaultInfiniteQueryTTL} ',
       );
-      final result = await fetcher(state.value.parameters, 1, pageSize);
 
-      // Cache the result
+      // check if the request is running already
+      final result = await cache
+          .executeWithDeduplication<DAQInfiniteQueryResponse<TData>>(
+            cacheKey,
+            () async {
+              return await fetcher(state.value.parameters, 1, pageSize);
+            },
+            tags: cacheTags,
+          );
+
+      //      final result = await fetcher(state.value.parameters, 1, pageSize);
+
       if (enableCache) {
         cache.addToCache(cacheKey, result, tags: cacheTags);
       }
+
+      cache.config.globalHandlersConfig?.onSuccess?.call(
+        GlobalSuccessEvent(type: GlobalEvenTypes.infiniteQuery, data: result),
+      );
 
       if (context.mounted) {
         state.value = state.value.copyWith(
@@ -146,6 +155,13 @@ useInfiniteQuery<TData, TParams, TError>({
       );
 
       final transformedError = errorTransformer(error, stackTrace);
+
+      cache.config.globalHandlersConfig?.onError?.call(
+        GlobalErrorEvent(
+          type: GlobalEvenTypes.infiniteQuery,
+          data: transformedError,
+        ),
+      );
 
       if (context.mounted) {
         state.value = state.value.copyWith(

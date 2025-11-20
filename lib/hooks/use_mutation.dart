@@ -87,6 +87,10 @@ useMutation<TData, TVariables, TError>({
         daqCache.invalidateKeys(invalidateKeys);
       }
 
+      daqCache.config.globalHandlersConfig?.onSuccess?.call(
+        GlobalSuccessEvent(type: GlobalEvenTypes.mutation, data: result),
+      );
+
       if (context.mounted) {
         onSuccess?.call(result, variables, daqCache);
       }
@@ -94,6 +98,13 @@ useMutation<TData, TVariables, TError>({
       final errorTransformed = errorTransformer(error, stackTrace);
 
       DAQLogger.instance.error('Error occurred: $error', 'DAQ Mutation', error);
+
+      daqCache.config.globalHandlersConfig?.onError?.call(
+        GlobalErrorEvent(
+          type: GlobalEvenTypes.mutation,
+          data: errorTransformed,
+        ),
+      );
 
       if (context.mounted) {
         state.value = MutationState.error(errorTransformed);

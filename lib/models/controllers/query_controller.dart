@@ -9,7 +9,7 @@ class QueryController<TData, TParams, TError> {
     required this.updateParameters,
   });
 
-  final QueryState<TData, TError> state;
+  final QueryState<TData, TError, TParams> state;
   final Future<void> Function({TParams? newParameters}) fetch;
   final Future<void> Function() refetch;
   final void Function(TParams newParameters) updateParameters;
@@ -21,6 +21,7 @@ class QueryController<TData, TParams, TError> {
   bool get isIdle => state.status == QueryLoadingState.idle;
 
   TData? get data => state.data;
+  TParams? get params => state.params;
   TError? get error => state.error;
   QueryLoadingState get status => state.status;
 

@@ -1,3 +1,5 @@
+import 'package:daq/utils/index.dart';
+
 /// Handles request deduplication to avoid duplicate requests for the same key
 ///
 class RequestDeduplicator {
@@ -25,6 +27,10 @@ class RequestDeduplicator {
   ) async {
     // Check if request is already inflight
     if (_inflightRequests.containsKey(key)) {
+      DAQLogger.instance.debug(
+        'Request for $key is already running - waiting to be complete',
+      );
+
       final existingRequest = _inflightRequests[key];
       if (existingRequest is Future<T>) {
         return existingRequest;

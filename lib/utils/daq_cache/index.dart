@@ -1,4 +1,4 @@
 export 'daq_cache.dart';
 export 'events.dart';
-export 'cache_parts/daq_config.dart';
+export 'daq_config/index.dart';
 export 'mutation_helpers/index.dart';

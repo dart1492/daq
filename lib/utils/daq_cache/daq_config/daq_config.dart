@@ -1,4 +1,6 @@
 // ignore_for_file: public_member_api_docs, sort_constructors_first
+import 'package:daq/utils/daq_cache/daq_config/index.dart';
+
 /// Configuration class for DAQ cache
 class DAQConfig {
   /// DISABLED LOGGING BY DEFAULT
@@ -6,9 +8,14 @@ class DAQConfig {
 
   final CacheTTLConfig ttlConfig;
 
-  DAQConfig({bool? enableLogging, CacheTTLConfig? ttlConfig})
-    : enableLogging = enableLogging ?? false,
-      ttlConfig = ttlConfig ?? CacheTTLConfig();
+  final GlobalDAQHandlers? globalHandlersConfig;
+
+  DAQConfig({
+    bool? enableLogging,
+    CacheTTLConfig? ttlConfig,
+    this.globalHandlersConfig,
+  }) : enableLogging = enableLogging ?? false,
+       ttlConfig = ttlConfig ?? CacheTTLConfig();
 }
 
 // TTL related configurations
